@@ -1,4 +1,5 @@
 const mineflayer = require('mineflayer');
+const autoAuth = require('mineflayer-auto-auth');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -12,12 +13,10 @@ const PORT = process.env.PORT || 3000;
 let bot = null;
 let antiAfkInterval = null;
 
-// Default Settings
 let botConfig = {
     host: 'play.applemc.net',
     port: 25565,
     username: 'AetherBot_99',
-    version: '1.20.1',
     password: 'wwwbot997'
 };
 
@@ -47,7 +46,7 @@ app.get('/', (req, res) => {
             .btn-start { background: #22c55e; color: #000; }
             .btn-stop { background: #ef4444; color: #fff; }
             .btn-realm { background: #f59e0b; color: #000; width: 100%; margin-top: 10px; }
-            #chat-box { height: 300px; background: #020617; border-radius: 6px; padding: 10px; overflow-y: auto; font-family: monospace; border: 1px solid #334155; margin-bottom: 10px; font-size: 13px; }
+            #chat-box { height: 320px; background: #020617; border-radius: 6px; padding: 10px; overflow-y: auto; font-family: monospace; border: 1px solid #334155; margin-bottom: 10px; font-size: 13px; }
             .msg { margin-bottom: 4px; word-break: break-all; }
             .chat-input { display: flex; gap: 5px; }
             .chat-input input { flex: 1; margin: 0; }
@@ -162,49 +161,33 @@ function startBotInstance(config) {
         host: config.host,
         port: parseInt(config.port),
         username: config.username,
-        version: '1.20.1'
+        version: false, // Auto-negotiate protocol version to bypass AntiBot
+        plugins: [autoAuth],
+        autoAuth: {
+            logging: true,
+            password: config.password
+        }
     });
 
     io.emit('status', 'online');
 
-    // Handle verification maps or held items
-    bot.on('heldItemChanged', (item) => {
-        if (item && item.name.includes('map')) {
-            sendLog('[VERIFY] Held item is a Map. Checking verification text...');
-        }
-    });
-
     bot.on('spawn', () => {
         sendLog('[SYSTEM] Bot spawned in server successfully!');
 
-        // Auto Login / Register sequence
+        // Delay anti-AFK movement to allow Anti-Bot verification to complete cleanly
         setTimeout(() => {
-            bot.chat(`/register ${config.password} ${config.password}`);
-            bot.chat(`/login ${config.password}`);
-        }, 2000);
-
-        // Anti-AFK Jump Loop
-        if (antiAfkInterval) clearInterval(antiAfkInterval);
-        antiAfkInterval = setInterval(() => {
-            if (bot) {
-                bot.setControlState('jump', true);
-                setTimeout(() => bot.setControlState('jump', false), 500);
-            }
-        }, 15000);
+            if (antiAfkInterval) clearInterval(antiAfkInterval);
+            antiAfkInterval = setInterval(() => {
+                if (bot) {
+                    bot.setControlState('jump', true);
+                    setTimeout(() => bot.setControlState('jump', false), 400);
+                }
+            }, 12000);
+        }, 5000);
     });
 
-    // Capture chat & map text messages
     bot.on('messagestr', (message) => {
         sendLog(`[SERVER] ${message}`);
-
-        // Automatic map verification code detector if sent via actionbar or title
-        if (message.toLowerCase().includes('register') || message.toLowerCase().includes('login')) {
-            if (message.toLowerCase().includes('/register')) {
-                bot.chat(`/register ${config.password} ${config.password}`);
-            } else if (message.toLowerCase().includes('/login')) {
-                bot.chat(`/login ${config.password}`);
-            }
-        }
     });
 
     bot.on('end', (reason) => {
