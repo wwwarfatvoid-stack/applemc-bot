@@ -14,7 +14,7 @@ let bot = null;
 let antiAfkInterval = null;
 
 let botConfig = {
-    host: 'play.applemc.net',
+    host: 'play.battlepie.net',
     port: 25565,
     username: 'AetherBot_99',
     password: 'wwwbot997'
@@ -161,31 +161,33 @@ function startBotInstance(config) {
         host: config.host,
         port: parseInt(config.port),
         username: config.username,
-        version: '1.20.1', // Stable version fix for AppleMC antibot
+        version: '1.20.1', // Stable version mapping for modern anti-bot filters
+        auth: 'offline',
+        hideErrors: false,
         plugins: [autoAuth],
         autoAuth: {
             logging: true,
             password: config.password
         },
-        checkTimeout: 60000 // Prevent early timeout disconnects during verification
+        checkTimeout: 120000 // Extended timeout to prevent abrupt socket drops during verification
     });
 
-    io.emit('status', 'online');
-
+    // Only set online once connection is securely established and spawned
     bot.on('spawn', () => {
-        sendLog('[SYSTEM] Bot spawned successfully. Waiting out anti-bot check...');
+        sendLog('[SYSTEM] Bot successfully spawned! Waiting out verification hold...');
+        io.emit('status', 'online');
 
-        // Do not move or send commands immediately to satisfy the "Please do not move" check
+        // Delay anti-AFK movement to completely clear anti-bot checks
         setTimeout(() => {
-            sendLog('[SYSTEM] Anti-bot verification window passed. Activating Anti-AFK loop...');
+            sendLog('[SYSTEM] Anti-bot window cleared. Starting Anti-AFK loop.');
             if (antiAfkInterval) clearInterval(antiAfkInterval);
             antiAfkInterval = setInterval(() => {
                 if (bot) {
                     bot.setControlState('jump', true);
-                    setTimeout(() => bot.setControlState('jump', false), 400);
+                    setTimeout(() => bot.setControlState('jump', false), 350);
                 }
-            }, 15000);
-        }, 10000); // 10 seconds buffer to let verification finish completely
+            }, 20000);
+        }, 12000);
     });
 
     bot.on('messagestr', (message) => {
