@@ -88,7 +88,7 @@ app.get('/', (req, res) => {
             <div class="card">
                 <div id="chat-box"></div>
                 <div class="chat-input">
-                    <input type="text" id="cmd" placeholder="Type chat or command (/login, /register, etc.)">
+                    <input type="text" id="cmd" placeholder="Type chat or command (/login, /register, etc.)" onkeydown="if(event.key==='Enter') sendMsg()">
                     <button onclick="sendMsg()">Send</button>
                 </div>
                 <button class="btn-realm" onclick="sendCmd('/banana')">Join Banana Realm (/banana)</button>
@@ -161,7 +161,7 @@ function startBotInstance(config) {
         host: config.host,
         port: parseInt(config.port),
         username: config.username,
-        version: '1.20.1', // Stable version mapping for modern anti-bot filters
+        version: '1.20.1',
         auth: 'offline',
         hideErrors: false,
         plugins: [autoAuth],
@@ -169,17 +169,16 @@ function startBotInstance(config) {
             logging: true,
             password: config.password
         },
-        checkTimeout: 120000 // Extended timeout to prevent abrupt socket drops during verification
+        checkTimeout: 120000
     });
 
-    // Only set online once connection is securely established and spawned
     bot.on('spawn', () => {
-        sendLog('[SYSTEM] Bot successfully spawned! Waiting out verification hold...');
+        sendLog('[SYSTEM] Bot successfully spawned in the game world!');
         io.emit('status', 'online');
 
-        // Delay anti-AFK movement to completely clear anti-bot checks
+        // Safe Anti-AFK loop
         setTimeout(() => {
-            sendLog('[SYSTEM] Anti-bot window cleared. Starting Anti-AFK loop.');
+            sendLog('[SYSTEM] Activating Anti-AFK loop.');
             if (antiAfkInterval) clearInterval(antiAfkInterval);
             antiAfkInterval = setInterval(() => {
                 if (bot) {
@@ -187,11 +186,18 @@ function startBotInstance(config) {
                     setTimeout(() => bot.setControlState('jump', false), 350);
                 }
             }, 20000);
-        }, 12000);
+        }, 10000);
     });
 
+    // Capture all incoming game messages, chat, and server titles/alerts
     bot.on('messagestr', (message) => {
-        sendLog(`[SERVER] ${message}`);
+        sendLog(`[GAME] ${message}`);
+    });
+
+    bot.on('chat', (username, message) => {
+        if (username !== bot.username) {
+            sendLog(`[CHAT] <${username}> ${message}`);
+        }
     });
 
     bot.on('end', (reason) => {
