@@ -25,6 +25,22 @@ let botConfig = {
     password: 'wwwbot997'
 };
 
+// Console Log Override (Shob console output direct dashboard-e pathanor jonno)
+const originalLog = console.log;
+const originalError = console.error;
+
+console.log = function (...args) {
+    originalLog.apply(console, args);
+    const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : a)).join(' ');
+    io.emit('message', `[CONSOLE] ${msg}`);
+};
+
+console.error = function (...args) {
+    originalError.apply(console, args);
+    const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : a)).join(' ');
+    io.emit('message', `[CONSOLE ERROR] ${msg}`);
+};
+
 app.get('/', (req, res) => {
     res.send(`
     <!DOCTYPE html>
@@ -165,12 +181,12 @@ app.get('/', (req, res) => {
 
 function startBotInstance(config) {
     if (bot) {
-        sendLog('[SYSTEM] Bot is already running!');
+        console.log('[SYSTEM] Bot is already running!');
         return;
     }
 
     botConfig = config;
-    sendLog(`[SYSTEM] Connecting to ${config.host}:${config.port} as ${config.username}...`);
+    console.log(`[SYSTEM] Connecting to ${config.host}:${config.port} as ${config.username}...`);
 
     bot = mineflayer.createBot({
         host: config.host,
@@ -188,11 +204,11 @@ function startBotInstance(config) {
     });
 
     bot.on('spawn', () => {
-        sendLog('[SYSTEM] Bot successfully spawned in the game world!');
+        console.log('[SYSTEM] Bot successfully spawned in the game world!');
         io.emit('status', 'online');
 
         setTimeout(() => {
-            sendLog('[SYSTEM] Activating Anti-AFK loop.');
+            console.log('[SYSTEM] Activating Anti-AFK loop.');
             if (antiAfkInterval) clearInterval(antiAfkInterval);
             antiAfkInterval = setInterval(() => {
                 if (bot) {
@@ -204,28 +220,28 @@ function startBotInstance(config) {
     });
 
     bot.on('messagestr', (message) => {
-        sendLog(`[GAME] ${message}`);
+        console.log(`[GAME] ${message}`);
     });
 
     bot.on('chat', (username, message) => {
         if (username !== bot.username) {
-            sendLog(`[CHAT] <${username}> ${message}`);
+            console.log(`[CHAT] <${username}> ${message}`);
         }
     });
 
     bot.on('kicked', (reason) => {
-        sendLog(`[KICKED] Bot was kicked: ${JSON.stringify(reason)}`);
+        console.log(`[KICKED] Bot was kicked: ${JSON.stringify(reason)}`);
     });
 
     bot.on('end', (reason) => {
-        sendLog(`[SYSTEM] Bot disconnected: ${reason}`);
+        console.log(`[SYSTEM] Bot disconnected: ${reason}`);
         io.emit('status', 'offline');
         bot = null;
         if (antiAfkInterval) clearInterval(antiAfkInterval);
     });
 
     bot.on('error', (err) => {
-        sendLog(`[ERROR] Connection error: ${err.message}`);
+        console.error(`[ERROR] Connection error: ${err.message}`);
         io.emit('status', 'offline');
     });
 }
@@ -235,16 +251,11 @@ function stopBotInstance() {
         bot.quit('User disconnected from dashboard');
         bot = null;
         if (antiAfkInterval) clearInterval(antiAfkInterval);
-        sendLog('[SYSTEM] Bot disconnected successfully.');
+        console.log('[SYSTEM] Bot disconnected successfully.');
         io.emit('status', 'offline');
     } else {
-        sendLog('[SYSTEM] No bot is currently running.');
+        console.log('[SYSTEM] No bot is currently running.');
     }
-}
-
-function sendLog(msg) {
-    console.log(msg);
-    io.emit('message', msg);
 }
 
 io.on('connection', (socket) => {
@@ -262,9 +273,9 @@ io.on('connection', (socket) => {
     socket.on('command', (cmd) => {
         if (bot) {
             bot.chat(cmd);
-            sendLog(`[SENT] ${cmd}`);
+            console.log(`[SENT] ${cmd}`);
         } else {
-            sendLog('[SYSTEM] Error: Bot is not connected. Press "Connect Bot" first.');
+            console.log('[SYSTEM] Error: Bot is not connected. Press "Connect Bot" first.');
         }
     });
 });
