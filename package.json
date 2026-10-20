@@ -1,0 +1,14 @@
+{
+  "name": "applemc-afk-bot",
+  "version": "1.0.0",
+  "description": "24/7 Minecraft AFK Bot for AppleMC",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "mineflayer": "^4.12.0",
+    "socket.io": "^4.7.2"
+  }
+}
