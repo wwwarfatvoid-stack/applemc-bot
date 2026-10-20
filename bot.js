@@ -14,7 +14,6 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 3000;
 
 let bot = null;
-let antiAfkInterval = null;
 let lookInterval = null;
 
 let botConfig = {
@@ -22,10 +21,10 @@ let botConfig = {
     port: 25565,
     username: 'Dragonfroge_02',
     password: '',
-    proxyHost: '',
-    proxyPort: '',
-    proxyUser: '',
-    proxyPass: ''
+    proxyHost: '45.38.107.97',
+    proxyPort: '6014',
+    proxyUser: 'uqbylpwv',
+    proxyPass: 'sviu1ch7jzgw'
 };
 
 const originalLog = console.log;
@@ -88,10 +87,10 @@ app.get('/', (req, res) => {
             .btn-stop { background: var(--red); color: #fff; }
             .btn-stop:hover { opacity: 0.9; }
 
-            .console-box { background: #030712; border: 1px solid #111827; border-radius: 10px; height: 350px; padding: 15px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.6; display: flex; flex-direction: column; gap: 4px; }
-            .msg { word-break: break-all; }
+            .console-box { background: #030712; border: 1px solid #111827; border-radius: 10px; height: 380px; padding: 15px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.6; display: flex; flex-direction: column; gap: 6px; }
+            .msg { word-break: break-all; white-space: pre-wrap; }
             .msg-info { color: #93c5fd; }
-            .msg-error { color: #fca5a5; }
+            .msg-error { color: #fca5a5; font-weight: 600; background: rgba(239, 68, 68, 0.1); padding: 4px 8px; border-radius: 4px; border-left: 3px solid var(--red); }
             .msg-game { color: #a7f3d0; }
             .msg-chat { color: #fde047; }
 
@@ -131,19 +130,19 @@ app.get('/', (req, res) => {
                 <div class="grid">
                     <div class="field-group">
                         <label>Proxy IP / Host</label>
-                        <input type="text" id="proxyHost" value="45.38.107.97">
+                        <input type="text" id="proxyHost" value="${botConfig.proxyHost}">
                     </div>
                     <div class="field-group">
                         <label>Proxy Port</label>
-                        <input type="text" id="proxyPort" value="6014">
+                        <input type="text" id="proxyPort" value="${botConfig.proxyPort}">
                     </div>
                     <div class="field-group">
                         <label>Proxy User</label>
-                        <input type="text" id="proxyUser" value="uqbylpwv">
+                        <input type="text" id="proxyUser" value="${botConfig.proxyUser}">
                     </div>
                     <div class="field-group">
                         <label>Proxy Pass</label>
-                        <input type="text" id="proxyPass" value="sviu1ch7jzgw">
+                        <input type="text" id="proxyPass" value="${botConfig.proxyPass}">
                     </div>
                 </div>
 
@@ -247,7 +246,6 @@ function startBotInstance(config) {
         checkTimeout: 120000
     };
 
-    // HTTP Proxy logic for Webshare
     if (config.proxyHost && config.proxyPort) {
         let proxyUrl = '';
         if (config.proxyUser && config.proxyPass) {
@@ -292,14 +290,22 @@ function startBotInstance(config) {
     });
 
     bot.on('kicked', (reason) => {
-        io.emit('message', { type: 'error', text: `[KICKED] ${JSON.stringify(reason)}` });
+        let parsedReason = reason;
+        try {
+            if (typeof reason === 'object') {
+                parsedReason = JSON.stringify(reason, null, 2);
+            }
+        } catch (e) {
+            parsedReason = String(reason);
+        }
+        console.error(`[KICKED FULL REASON] ${parsedReason}`);
+        io.emit('message', { type: 'error', text: `[KICKED] ${parsedReason}` });
     });
 
     bot.on('end', (reason) => {
         console.log(`[SYSTEM] Disconnected: ${reason}`);
         io.emit('status', 'offline');
         bot = null;
-        if (antiAfkInterval) clearInterval(antiAfkInterval);
         if (lookInterval) clearInterval(lookInterval);
     });
 
@@ -313,8 +319,7 @@ function stopBotInstance() {
     if (bot) {
         bot.quit('User disconnected');
         bot = null;
-        if (antiAfkInterval) clearInterval(antiAfkInterval);
-        if (lookInterval) ProxyCleanup = null;
+        if (lookInterval) clearInterval(lookInterval);
         console.log('[SYSTEM] Bot disconnected.');
         io.emit('status', 'offline');
     }
