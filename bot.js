@@ -7,16 +7,14 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
+    cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
 const PORT = process.env.PORT || 3000;
 
 let bot = null;
 let antiAfkInterval = null;
+let lookInterval = null;
 
 let botConfig = {
     host: 'play.applemc.fun',
@@ -25,20 +23,20 @@ let botConfig = {
     password: ''
 };
 
-// Console log override to push everything to dashboard
+// Console Log Redirection
 const originalLog = console.log;
 const originalError = console.error;
 
 console.log = function (...args) {
     originalLog.apply(console, args);
     const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : a)).join(' ');
-    io.emit('message', `[CONSOLE] ${msg}`);
+    io.emit('message', { type: 'info', text: `[CONSOLE] ${msg}` });
 };
 
 console.error = function (...args) {
     originalError.apply(console, args);
     const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : a)).join(' ');
-    io.emit('message', `[CONSOLE ERROR] ${msg}`);
+    io.emit('message', { type: 'error', text: `[ERROR] ${msg}` });
 };
 
 app.get('/', (req, res) => {
@@ -48,99 +46,128 @@ app.get('/', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>AetherMind Bot Dashboard</title>
+        <title>DragonForge Ultra AFK Studio</title>
         <script src="/socket.io/socket.io.js"></script>
+        <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
         <style>
-            * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-            body { background: #0f172a; color: #f8fafc; margin: 0; padding: 15px; }
-            .container { max-width: 800px; margin: 0 auto; }
-            .card { background: #1e293b; border-radius: 10px; padding: 15px; margin-bottom: 15px; border: 1px solid #334155; }
-            h2 { margin-top: 0; color: #38bdf8; text-align: center; }
-            .status { font-weight: bold; padding: 6px 12px; border-radius: 6px; display: inline-block; }
-            .online { background: #166534; color: #4ade80; }
-            .offline { background: #991b1b; color: #fca5a5; }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-            input { width: 100%; padding: 10px; background: #0f172a; border: 1px solid #475569; border-radius: 6px; color: #fff; margin-top: 4px; }
-            label { font-size: 12px; color: #94a3b8; }
-            .btn-group { display: flex; gap: 10px; margin-top: 10px; }
-            button { flex: 1; padding: 10px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
-            .btn-start { background: #22c55e; color: #000; }
-            .btn-stop { background: #ef4444; color: #fff; }
-            #chat-box { height: 350px; background: #020617; border-radius: 6px; padding: 10px; overflow-y: auto; font-family: monospace; border: 1px solid #334155; margin-bottom: 10px; font-size: 13px; }
-            .msg { margin-bottom: 4px; word-break: break-all; }
-            .chat-input { display: flex; gap: 5px; }
-            .chat-input input { flex: 1; margin: 0; }
-            .chat-input button { flex: none; width: 80px; background: #3b82f6; color: #fff; }
+            :root {
+                --bg: #090d16;
+                --card-bg: #111827;
+                --accent: #38bdf8;
+                --accent-hover: #0284c7;
+                --green: #10b981;
+                --red: #ef4444;
+                --border: #1e293b;
+            }
+            * { box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; margin: 0; padding: 0; }
+            body { background: var(--bg); color: #f3f4f6; padding: 20px; display: flex; justify-content: center; }
+            .wrapper { width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 20px; }
+            
+            header { display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); border: 1px solid var(--border); padding: 18px 24px; border-radius: 12px; }
+            header h1 { font-size: 20px; font-weight: 700; color: var(--accent); letter-spacing: -0.5px; }
+            .badge { padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+            .bg-online { background: rgba(16, 185, 129, 0.15); color: var(--green); border: 1px solid var(--green); }
+            .bg-offline { background: rgba(239, 68, 68, 0.15); color: var(--red); border: 1px solid var(--red); }
+
+            .panel { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+            .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px; }
+            .field-group { display: flex; flex-direction: column; gap: 6px; }
+            label { font-size: 12px; font-weight: 600; color: #9ca3af; text-transform: uppercase; }
+            input { background: #0b0f19; border: 1px solid #1f2937; color: #fff; padding: 12px; border-radius: 8px; font-size: 14px; outline: none; transition: 0.2s; }
+            input:focus { border-color: var(--accent); }
+
+            .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+            button { padding: 12px; border: none; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer; transition: 0.2s; }
+            .btn-start { background: var(--green); color: #000; }
+            .btn-start:hover { opacity: 0.9; }
+            .btn-stop { background: var(--red); color: #fff; }
+            .btn-stop:hover { opacity: 0.9; }
+
+            .console-box { background: #030712; border: 1px solid #111827; border-radius: 10px; height: 380px; padding: 15px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.6; display: flex; flex-direction: column; gap: 4px; }
+            .msg { word-break: break-all; }
+            .msg-info { color: #93c5fd; }
+            .msg-error { color: #fca5a5; }
+            .msg-game { color: #a7f3d0; }
+            .msg-chat { color: #fde047; }
+
+            .input-row { display: flex; gap: 10px; margin-top: 12px; }
+            .input-row input { flex: 1; }
+            .btn-send { background: var(--accent); color: #000; width: 100px; }
         </style>
     </head>
     <body>
-        <div class="container">
-            <h2>AetherMind AFK Control Panel</h2>
-            
-            <div class="card">
-                <div>Status: <span id="bot-status" class="status offline">OFFLINE</span></div>
-                <div class="grid" style="margin-top: 10px;">
-                    <div>
-                        <label>Server IP</label>
+        <div class="wrapper">
+            <header>
+                <h1>DragonForge AFK Studio v2.0</h1>
+                <div id="bot-status" class="badge bg-offline">OFFLINE</div>
+            </header>
+
+            <div class="panel">
+                <div class="grid">
+                    <div class="field-group">
+                        <label>Server Host / IP</label>
                         <input type="text" id="host" value="${botConfig.host}">
                     </div>
-                    <div>
-                        <label>Bot Username</label>
-                        <input type="text" id="username" value="${botConfig.username}">
-                    </div>
-                </div>
-                <div class="grid">
-                    <div>
-                        <label>Server Port</label>
+                    <div class="field-group">
+                        <label>Port</label>
                         <input type="text" id="port" value="${botConfig.port}">
                     </div>
-                    <div>
-                        <label>Account Password (Optional)</label>
-                        <input type="text" id="password" value="${botConfig.password}">
+                    <div class="field-group">
+                        <label>Bot Name</label>
+                        <input type="text" id="username" value="${botConfig.username}">
+                    </div>
+                    <div class="field-group">
+                        <label>Password (AutoAuth)</label>
+                        <input type="text" id="password" value="${botConfig.password}" placeholder="Optional">
                     </div>
                 </div>
-                <div class="btn-group">
-                    <button class="btn-start" onclick="connectBot()">Connect Bot</button>
-                    <button class="btn-stop" onclick="disconnectBot()">Disconnect Bot</button>
+                <div class="btn-grid">
+                    <button class="btn-start" onclick="connectBot()">LAUNCH BOT</button>
+                    <button class="btn-stop" onclick="disconnectBot()">DISCONNECT</button>
                 </div>
             </div>
 
-            <div class="card">
-                <div id="chat-box"></div>
-                <div class="chat-input">
-                    <input type="text" id="cmd" placeholder="Type chat or command (/login, /register, etc.)" onkeydown="if(event.key==='Enter') sendMsg()">
-                    <button onclick="sendMsg()">Send</button>
+            <div class="panel">
+                <div id="console" class="console-box"></div>
+                <div class="input-row">
+                    <input type="text" id="cmd" placeholder="Send chat message or command (/login, /register, etc.)..." onkeydown="if(event.key==='Enter') sendMsg()">
+                    <button class="btn-send" onclick="sendMsg()">SEND</button>
                 </div>
             </div>
         </div>
 
         <script>
             const socket = io({ transports: ['websocket', 'polling'] });
-            const chatBox = document.getElementById('chat-box');
+            const consoleBox = document.getElementById('console');
             const statusEl = document.getElementById('bot-status');
 
+            function appendLog(text, type = 'info') {
+                const div = document.createElement('div');
+                div.className = 'msg msg-' + type;
+                div.innerText = text;
+                consoleBox.appendChild(div);
+                consoleBox.scrollTop = consoleBox.scrollHeight;
+            }
+
             socket.on('connect', () => {
-                const el = document.createElement('div');
-                el.className = 'msg';
-                el.innerText = '[SYSTEM] Dashboard Connected to Web Server!';
-                chatBox.appendChild(el);
+                appendLog('[SYSTEM] Studio Dashboard Online & Ready.', 'info');
             });
 
             socket.on('message', (data) => {
-                const el = document.createElement('div');
-                el.className = 'msg';
-                el.innerText = data;
-                chatBox.appendChild(el);
-                chatBox.scrollTop = chatBox.scrollHeight;
+                if(typeof data === 'object') {
+                    appendLog(data.text, data.type);
+                } else {
+                    appendLog(data, 'info');
+                }
             });
 
             socket.on('status', (state) => {
                 if(state === 'online') {
                     statusEl.innerText = 'ONLINE';
-                    statusEl.className = 'status online';
+                    statusEl.className = 'badge bg-online';
                 } else {
                     statusEl.innerText = 'OFFLINE';
-                    statusEl.className = 'status offline';
+                    statusEl.className = 'badge bg-offline';
                 }
             });
 
@@ -176,7 +203,7 @@ function startBotInstance(config) {
     }
 
     botConfig = config;
-    console.log(`[SYSTEM] Connecting to ${config.host}:${config.port} as ${config.username}...`);
+    console.log(`[SYSTEM] Initializing Ultra Client Connection to ${config.host}:${config.port}...`);
 
     const botOptions = {
         host: config.host,
@@ -185,7 +212,9 @@ function startBotInstance(config) {
         version: '1.20.1',
         auth: 'offline',
         hideErrors: false,
-        checkTimeout: 120000
+        checkTimeout: 120000,
+        physicsEnabled: true,
+        viewDistance: 'far'
     };
 
     if (config.password && config.password.trim() !== '') {
@@ -196,59 +225,60 @@ function startBotInstance(config) {
     bot = mineflayer.createBot(botOptions);
 
     bot.on('spawn', () => {
-        console.log('[SYSTEM] Bot successfully spawned in the game world! Waiting for verification / login...');
+        console.log('[SYSTEM] Bot successfully spawned! Ultra Humanizer active.');
         io.emit('status', 'online');
 
-        // Note: No automatic movement/jump here so verification process is uninterrupted!
+        // Humanize Look Simulation (Slight realistic head movement)
+        if (lookInterval) clearInterval(lookInterval);
+        lookInterval = setInterval(() => {
+            if (bot && bot.entity) {
+                const yaw = (Math.random() - 0.5) * 0.5;
+                const pitch = (Math.random() - 0.5) * 0.2;
+                bot.look(bot.entity.yaw + yaw, bot.entity.pitch + pitch, false);
+            }
+        }, 4000);
     });
 
-    // Capture every raw game message / chat / title / notification
     bot.on('messagestr', (message) => {
-        console.log(`[GAME] ${message}`);
+        io.emit('message', { type: 'game', text: `[GAME] ${message}` });
     });
 
     bot.on('chat', (username, message) => {
         if (username !== bot.username) {
-            console.log(`[CHAT] <${username}> ${message}`);
+            io.emit('message', { type: 'chat', text: `[CHAT] <${username}> ${message}` });
         }
     });
 
-    bot.on('title', (text) => {
-        console.log(`[TITLE/VERIFY] ${text}`);
-    });
-
     bot.on('kicked', (reason) => {
-        console.log(`[KICKED] Bot was kicked by server: ${JSON.stringify(reason)}`);
+        io.emit('message', { type: 'error', text: `[KICKED] ${JSON.stringify(reason)}` });
     });
 
     bot.on('end', (reason) => {
-        console.log(`[SYSTEM] Bot disconnected: ${reason}`);
-        io.emit('status', 'online' === 'offline' ? 'online' : 'offline');
+        console.log(`[SYSTEM] Disconnected: ${reason}`);
         io.emit('status', 'offline');
         bot = null;
         if (antiAfkInterval) clearInterval(antiAfkInterval);
+        if (lookInterval) clearInterval(lookInterval);
     });
 
     bot.on('error', (err) => {
-        console.error(`[ERROR] Connection error: ${err.message}`);
+        console.error(`[ERROR] ${err.message}`);
         io.emit('status', 'offline');
     });
 }
 
 function stopBotInstance() {
     if (bot) {
-        bot.quit('User disconnected from dashboard');
+        bot.quit('Disconnected from Ultra Dashboard');
         bot = null;
         if (antiAfkInterval) clearInterval(antiAfkInterval);
-        console.log('[SYSTEM] Bot disconnected successfully.');
+        if (lookInterval) clearInterval(lookInterval);
+        console.log('[SYSTEM] Bot disconnected.');
         io.emit('status', 'offline');
-    } else {
-        console.log('[SYSTEM] No bot is currently running.');
     }
 }
 
 io.on('connection', (socket) => {
-    socket.emit('message', '[SYSTEM] Connected to AetherMind Control Panel.');
     socket.emit('status', bot ? 'online' : 'offline');
 
     socket.on('startBot', (config) => {
@@ -262,13 +292,13 @@ io.on('connection', (socket) => {
     socket.on('command', (cmd) => {
         if (bot) {
             bot.chat(cmd);
-            console.log(`[SENT COMMAND] ${cmd}`);
+            io.emit('message', { type: 'info', text: `[SENT] ${cmd}` });
         } else {
-            console.log('[SYSTEM] Error: Bot is not connected. Press "Connect Bot" first.');
+            io.emit('message', { type: 'error', text: '[SYSTEM] Bot is not connected!' });
         }
     });
 });
 
 server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Ultra Dashboard Server active on port ${PORT}`);
 });
