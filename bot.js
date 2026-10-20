@@ -16,6 +16,7 @@ const PORT = process.env.PORT || 3000;
 
 let bot = null;
 let lookInterval = null;
+let isVerifying = false; // Verification state track korar jonno
 
 let botConfig = {
     host: 'play.applemc.fun',
@@ -257,6 +258,7 @@ function startBotInstance(config) {
     }
 
     botConfig = config;
+    isVerifying = false;
     console.log(`[SYSTEM] Initializing Client Connection to ${config.host}:${config.port}...`);
 
     const botOptions = {
@@ -289,21 +291,35 @@ function startBotInstance(config) {
     bot = mineflayer.createBot(botOptions);
 
     bot.on('spawn', () => {
-        console.log('[SYSTEM] Bot successfully spawned in game!');
+        console.log('[SYSTEM] Bot spawned in game. Waiting still for verification...');
         io.emit('status', 'online');
 
         if (lookInterval) clearInterval(lookInterval);
-        lookInterval = setInterval(() => {
-            if (bot && bot.entity) {
-                const yaw = (Math.random() - 0.5) * 0.4;
-                const pitch = (Math.random() - 0.5) * 0.2;
-                bot.look(bot.entity.yaw + yaw, bot.entity.pitch + pitch, false);
+
+        // Verification shomoy zero movement: Only start random look after 15 seconds if not verifying
+        setTimeout(() => {
+            if (bot && !isVerifying) {
+                console.log('[SYSTEM] Verification window passed. Starting background anti-AFK rotation...');
+                lookInterval = setInterval(() => {
+                    if (bot && bot.entity && !isVerifying) {
+                        const yaw = (Math.random() - 0.5) * 0.4;
+                        const pitch = (Math.random() - 0.5) * 0.2;
+                        bot.look(bot.entity.yaw + yaw, bot.entity.pitch + pitch, false);
+                    }
+                }, 8000);
             }
-        }, 5000);
+        }, 15000);
     });
 
     bot.on('messagestr', (message) => {
         io.emit('message', { type: 'game', text: `[GAME] ${message}` });
+
+        // Anti-bot trigger detect kora
+        if (message.includes('being verified') || message.includes('Please do not move')) {
+            isVerifying = true;
+            console.log('[ANTIBOT DETECTED] Freezing all movement/head turns completely.');
+            if (lookInterval) clearInterval(lookInterval);
+        }
     });
 
     bot.on('chat', async (username, message) => {
@@ -338,6 +354,7 @@ function startBotInstance(config) {
         console.log(`[SYSTEM] Disconnected: ${reason}`);
         io.emit('status', 'offline');
         bot = null;
+        isVerifying = false;
         if (lookInterval) clearInterval(lookInterval);
     });
 
@@ -351,6 +368,7 @@ function stopBotInstance() {
     if (bot) {
         bot.quit('User disconnected');
         bot = null;
+        isVerifying = false;
         if (lookInterval) clearInterval(lookInterval);
         console.log('[SYSTEM] Bot disconnected.');
         io.emit('status', 'offline');
