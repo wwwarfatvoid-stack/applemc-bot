@@ -6,7 +6,12 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
 
 const PORT = process.env.PORT || 3000;
 
@@ -96,9 +101,19 @@ app.get('/', (req, res) => {
         </div>
 
         <script>
-            const socket = io();
+            const socket = io({
+                transports: ['websocket', 'polling']
+            });
+            
             const chatBox = document.getElementById('chat-box');
             const statusEl = document.getElementById('bot-status');
+
+            socket.on('connect', () => {
+                const el = document.createElement('div');
+                el.className = 'msg';
+                el.innerText = '[SYSTEM] Dashboard Connected to Web Server!';
+                chatBox.appendChild(el);
+            });
 
             socket.on('message', (data) => {
                 const el = document.createElement('div');
@@ -198,7 +213,6 @@ function startBotInstance(config) {
         }
     });
 
-    // Detailed KICK log
     bot.on('kicked', (reason) => {
         sendLog(`[KICKED] Bot was kicked: ${JSON.stringify(reason)}`);
     });
@@ -210,7 +224,6 @@ function startBotInstance(config) {
         if (antiAfkInterval) clearInterval(antiAfkInterval);
     });
 
-    // Detailed ERROR log
     bot.on('error', (err) => {
         sendLog(`[ERROR] Connection error: ${err.message}`);
         io.emit('status', 'offline');
