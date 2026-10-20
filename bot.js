@@ -3,7 +3,6 @@ const autoAuth = require('mineflayer-auto-auth');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { HttpProxyAgent } = require('http-proxy-agent');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
@@ -16,17 +15,14 @@ const PORT = process.env.PORT || 3000;
 
 let bot = null;
 let lookInterval = null;
-let isVerifying = false; // Verification state track korar jonno
+let afkActionInterval = null;
+let isVerifying = false;
 
 let botConfig = {
     host: 'play.applemc.fun',
     port: 25565,
     username: 'Dragonfroge_02',
     password: '',
-    proxyHost: '45.38.107.97',
-    proxyPort: '6014',
-    proxyUser: 'uqbylpwv',
-    proxyPass: 'sviu1ch7jzgw',
     geminiKey: ''
 };
 
@@ -52,7 +48,7 @@ app.get('/', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>DragonForge AFK Studio v2.0</title>
+        <title>DragonForge AFK Studio v2.0 (Direct Connection)</title>
         <script src="/socket.io/socket.io.js"></script>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
         <style>
@@ -130,7 +126,7 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
 
-                <div class="proxy-title">Gemini AI Integration (Optional)</div>
+                <div class="proxy-title">Gemini AI Integration</div>
                 <div class="grid">
                     <div class="field-group" style="grid-column: span 2;">
                         <label>Gemini API Key</label>
@@ -138,28 +134,8 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
 
-                <div class="proxy-title">HTTP Proxy (Webshare)</div>
-                <div class="grid">
-                    <div class="field-group">
-                        <label>Proxy IP / Host</label>
-                        <input type="text" id="proxyHost" value="${botConfig.proxyHost}">
-                    </div>
-                    <div class="field-group">
-                        <label>Proxy Port</label>
-                        <input type="text" id="proxyPort" value="${botConfig.proxyPort}">
-                    </div>
-                    <div class="field-group">
-                        <label>Proxy User</label>
-                        <input type="text" id="proxyUser" value="${botConfig.proxyUser}">
-                    </div>
-                    <div class="field-group">
-                        <label>Proxy Pass</label>
-                        <input type="text" id="proxyPass" value="${botConfig.proxyPass}">
-                    </div>
-                </div>
-
                 <div class="btn-grid">
-                    <button class="btn-start" onclick="connectBot()">LAUNCH BOT</button>
+                    <button class="btn-start" onclick="connectBot()">LAUNCH BOT (DIRECT)</button>
                     <button class="btn-stop" onclick="disconnectBot()">DISCONNECT</button>
                 </div>
             </div>
@@ -167,7 +143,7 @@ app.get('/', (req, res) => {
             <div class="panel">
                 <div id="console" class="console-box"></div>
                 <div class="input-row">
-                    <input type="text" id="cmd" placeholder="Ask AI (ai: question) or type command..." onkeydown="if(event.key==='Enter') sendMsg()">
+                    <input type="text" id="cmd" placeholder="Ask AI (ai: question) or type chat/command..." onkeydown="if(event.key==='Enter') sendMsg()">
                     <button class="btn-send" onclick="sendMsg()">SEND</button>
                 </div>
             </div>
@@ -215,12 +191,7 @@ app.get('/', (req, res) => {
                 const password = document.getElementById('password').value;
                 const geminiKey = document.getElementById('geminiKey').value;
 
-                const proxyHost = document.getElementById('proxyHost').value;
-                const proxyPort = document.getElementById('proxyPort').value;
-                const proxyUser = document.getElementById('proxyUser').value;
-                const proxyPass = document.getElementById('proxyPass').value;
-
-                socket.emit('startBot', { host, port, username, password, geminiKey, proxyHost, proxyPort, proxyUser, proxyPass });
+                socket.emit('startBot', { host, port, username, password, geminiKey });
             }
 
             function disconnectBot() {
@@ -229,8 +200,9 @@ app.get('/', (req, res) => {
 
             function sendMsg() {
                 const input = document.getElementById('cmd');
-                if(input.value.trim() !== '') {
-                    socket.emit('command', input.value);
+                const msg = input.value.trim();
+                if(msg !== '') {
+                    socket.emit('command', msg);
                     input.value = '';
                 }
             }
@@ -259,7 +231,7 @@ function startBotInstance(config) {
 
     botConfig = config;
     isVerifying = false;
-    console.log(`[SYSTEM] Initializing Client Connection to ${config.host}:${config.port}...`);
+    console.log(`[SYSTEM] Direct Connection Initializing to ${config.host}:${config.port}...`);
 
     const botOptions = {
         host: config.host,
@@ -268,20 +240,9 @@ function startBotInstance(config) {
         version: '1.20.1',
         auth: 'offline',
         hideErrors: false,
-        checkTimeout: 120000
+        checkTimeoutInterval: 90 * 1000,
+        keepAlive: true
     };
-
-    if (config.proxyHost && config.proxyPort) {
-        let proxyUrl = '';
-        if (config.proxyUser && config.proxyPass) {
-            proxyUrl = `http://${config.proxyUser}:${config.proxyPass}@${config.proxyHost}:${config.proxyPort}`;
-        } else {
-            proxyUrl = `http://${config.proxyHost}:${config.proxyPort}`;
-        }
-        console.log(`[PROXY] Routing connection through HTTP Proxy: ${config.proxyHost}:${config.proxyPort}`);
-        const agent = new HttpProxyAgent(proxyUrl);
-        botOptions.agent = agent;
-    }
 
     if (config.password && config.password.trim() !== '') {
         botOptions.plugins = [autoAuth];
@@ -291,22 +252,35 @@ function startBotInstance(config) {
     bot = mineflayer.createBot(botOptions);
 
     bot.on('spawn', () => {
-        console.log('[SYSTEM] Bot spawned in game. Waiting still for verification...');
+        console.log('[SYSTEM] Direct Bot spawned into server!');
         io.emit('status', 'online');
 
         if (lookInterval) clearInterval(lookInterval);
+        if (afkActionInterval) clearInterval(afkActionInterval);
 
-        // Verification shomoy zero movement: Only start random look after 15 seconds if not verifying
+        // Advanced Anti-AFK behavior after 15 seconds
         setTimeout(() => {
             if (bot && !isVerifying) {
-                console.log('[SYSTEM] Verification window passed. Starting background anti-AFK rotation...');
+                console.log('[SYSTEM] Starting Smart Anti-AFK engine...');
+                
+                // Dynamic Look Engine
                 lookInterval = setInterval(() => {
                     if (bot && bot.entity && !isVerifying) {
-                        const yaw = (Math.random() - 0.5) * 0.4;
+                        const yaw = (Math.random() - 0.5) * 0.5;
                         const pitch = (Math.random() - 0.5) * 0.2;
                         bot.look(bot.entity.yaw + yaw, bot.entity.pitch + pitch, false);
                     }
-                }, 8000);
+                }, 7000);
+
+                // Periodic Jump / Sneak Cycle
+                afkActionInterval = setInterval(() => {
+                    if (bot && !isVerifying) {
+                        bot.setControlState('sneak', true);
+                        setTimeout(() => {
+                            if (bot) bot.setControlState('sneak', false);
+                        }, 800);
+                    }
+                }, 30000);
             }
         }, 15000);
     });
@@ -314,11 +288,12 @@ function startBotInstance(config) {
     bot.on('messagestr', (message) => {
         io.emit('message', { type: 'game', text: `[GAME] ${message}` });
 
-        // Anti-bot trigger detect kora
+        // Freeze bot completely during Anti-bot check
         if (message.includes('being verified') || message.includes('Please do not move')) {
             isVerifying = true;
-            console.log('[ANTIBOT DETECTED] Freezing all movement/head turns completely.');
+            console.log('[ANTIBOT DETECTED] Freezing movements completely.');
             if (lookInterval) clearInterval(lookInterval);
+            if (afkActionInterval) clearInterval(afkActionInterval);
         }
     });
 
@@ -327,8 +302,8 @@ function startBotInstance(config) {
             io.emit('message', { type: 'chat', text: `[CHAT] <${username}> ${message}` });
 
             if (message.toLowerCase().includes(bot.username.toLowerCase()) && config.geminiKey) {
-                console.log(`[AI] Generating response for ${username}'s message...`);
-                const aiReply = await askGemini(config.geminiKey, `You are a Minecraft player named ${bot.username}. Someone named ${username} said to you: "${message}". Keep your reply short, friendly, and natural (max 1 sentence).`);
+                console.log(`[AI] Processing response for ${username}...`);
+                const aiReply = await askGemini(config.geminiKey, `You are a Minecraft player named ${bot.username}. ${username} said: "${message}". Reply naturally in 1 short sentence.`);
                 if (aiReply && bot) {
                     bot.chat(aiReply);
                     io.emit('message', { type: 'ai', text: `[AI REPLY] ${aiReply}` });
@@ -356,6 +331,7 @@ function startBotInstance(config) {
         bot = null;
         isVerifying = false;
         if (lookInterval) clearInterval(lookInterval);
+        if (afkActionInterval) clearInterval(afkActionInterval);
     });
 
     bot.on('error', (err) => {
@@ -370,6 +346,7 @@ function stopBotInstance() {
         bot = null;
         isVerifying = false;
         if (lookInterval) clearInterval(lookInterval);
+        if (afkActionInterval) clearInterval(afkActionInterval);
         console.log('[SYSTEM] Bot disconnected.');
         io.emit('status', 'offline');
     }
@@ -391,7 +368,7 @@ io.on('connection', (socket) => {
             if (cmd.startsWith('ai: ')) {
                 const prompt = cmd.replace('ai: ', '');
                 if (botConfig.geminiKey) {
-                    io.emit('message', { type: 'info', text: `[AI] Thinking about: "${prompt}"...` });
+                    io.emit('message', { type: 'info', text: `[AI] Generating response for: "${prompt}"...` });
                     const aiAnswer = await askGemini(botConfig.geminiKey, prompt);
                     bot.chat(aiAnswer);
                     io.emit('message', { type: 'ai', text: `[AI SENT] ${aiAnswer}` });
