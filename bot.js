@@ -161,29 +161,31 @@ function startBotInstance(config) {
         host: config.host,
         port: parseInt(config.port),
         username: config.username,
-        version: false, // Auto-negotiate protocol version to bypass AntiBot
+        version: '1.20.1', // Stable version fix for AppleMC antibot
         plugins: [autoAuth],
         autoAuth: {
             logging: true,
             password: config.password
-        }
+        },
+        checkTimeout: 60000 // Prevent early timeout disconnects during verification
     });
 
     io.emit('status', 'online');
 
     bot.on('spawn', () => {
-        sendLog('[SYSTEM] Bot spawned in server successfully!');
+        sendLog('[SYSTEM] Bot spawned successfully. Waiting out anti-bot check...');
 
-        // Delay anti-AFK movement to allow Anti-Bot verification to complete cleanly
+        // Do not move or send commands immediately to satisfy the "Please do not move" check
         setTimeout(() => {
+            sendLog('[SYSTEM] Anti-bot verification window passed. Activating Anti-AFK loop...');
             if (antiAfkInterval) clearInterval(antiAfkInterval);
             antiAfkInterval = setInterval(() => {
                 if (bot) {
                     bot.setControlState('jump', true);
                     setTimeout(() => bot.setControlState('jump', false), 400);
                 }
-            }, 12000);
-        }, 5000);
+            }, 15000);
+        }, 10000); // 10 seconds buffer to let verification finish completely
     });
 
     bot.on('messagestr', (message) => {
