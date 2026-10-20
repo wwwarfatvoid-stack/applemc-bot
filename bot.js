@@ -19,13 +19,13 @@ let bot = null;
 let antiAfkInterval = null;
 
 let botConfig = {
-    host: 'play.battlepie.net',
+    host: 'play.applemc.fun',
     port: 25565,
-    username: 'AetherBot_99',
-    password: 'wwwbot997'
+    username: 'Dragonfroge_02',
+    password: ''
 };
 
-// Console Log Override (Shob console output direct dashboard-e pathanor jonno)
+// Console log override to push everything to dashboard
 const originalLog = console.log;
 const originalError = console.error;
 
@@ -66,8 +66,7 @@ app.get('/', (req, res) => {
             button { flex: 1; padding: 10px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
             .btn-start { background: #22c55e; color: #000; }
             .btn-stop { background: #ef4444; color: #fff; }
-            .btn-realm { background: #f59e0b; color: #000; width: 100%; margin-top: 10px; }
-            #chat-box { height: 320px; background: #020617; border-radius: 6px; padding: 10px; overflow-y: auto; font-family: monospace; border: 1px solid #334155; margin-bottom: 10px; font-size: 13px; }
+            #chat-box { height: 350px; background: #020617; border-radius: 6px; padding: 10px; overflow-y: auto; font-family: monospace; border: 1px solid #334155; margin-bottom: 10px; font-size: 13px; }
             .msg { margin-bottom: 4px; word-break: break-all; }
             .chat-input { display: flex; gap: 5px; }
             .chat-input input { flex: 1; margin: 0; }
@@ -96,7 +95,7 @@ app.get('/', (req, res) => {
                         <input type="text" id="port" value="${botConfig.port}">
                     </div>
                     <div>
-                        <label>Account Password</label>
+                        <label>Account Password (Optional)</label>
                         <input type="text" id="password" value="${botConfig.password}">
                     </div>
                 </div>
@@ -112,15 +111,11 @@ app.get('/', (req, res) => {
                     <input type="text" id="cmd" placeholder="Type chat or command (/login, /register, etc.)" onkeydown="if(event.key==='Enter') sendMsg()">
                     <button onclick="sendMsg()">Send</button>
                 </div>
-                <button class="btn-realm" onclick="sendCmd('/banana')">Join Banana Realm (/banana)</button>
             </div>
         </div>
 
         <script>
-            const socket = io({
-                transports: ['websocket', 'polling']
-            });
-            
+            const socket = io({ transports: ['websocket', 'polling'] });
             const chatBox = document.getElementById('chat-box');
             const statusEl = document.getElementById('bot-status');
 
@@ -154,7 +149,6 @@ app.get('/', (req, res) => {
                 const port = document.getElementById('port').value;
                 const username = document.getElementById('username').value;
                 const password = document.getElementById('password').value;
-                
                 socket.emit('startBot', { host, port, username, password });
             }
 
@@ -168,10 +162,6 @@ app.get('/', (req, res) => {
                     socket.emit('command', input.value);
                     input.value = '';
                 }
-            }
-
-            function sendCmd(cmd) {
-                socket.emit('command', cmd);
             }
         </script>
     </body>
@@ -188,37 +178,31 @@ function startBotInstance(config) {
     botConfig = config;
     console.log(`[SYSTEM] Connecting to ${config.host}:${config.port} as ${config.username}...`);
 
-    bot = mineflayer.createBot({
+    const botOptions = {
         host: config.host,
         port: parseInt(config.port),
         username: config.username,
         version: '1.20.1',
         auth: 'offline',
         hideErrors: false,
-        plugins: [autoAuth],
-        autoAuth: {
-            logging: true,
-            password: config.password
-        },
         checkTimeout: 120000
-    });
+    };
+
+    if (config.password && config.password.trim() !== '') {
+        botOptions.plugins = [autoAuth];
+        botOptions.autoAuth = { logging: true, password: config.password };
+    }
+
+    bot = mineflayer.createBot(botOptions);
 
     bot.on('spawn', () => {
-        console.log('[SYSTEM] Bot successfully spawned in the game world!');
+        console.log('[SYSTEM] Bot successfully spawned in the game world! Waiting for verification / login...');
         io.emit('status', 'online');
 
-        setTimeout(() => {
-            console.log('[SYSTEM] Activating Anti-AFK loop.');
-            if (antiAfkInterval) clearInterval(antiAfkInterval);
-            antiAfkInterval = setInterval(() => {
-                if (bot) {
-                    bot.setControlState('jump', true);
-                    setTimeout(() => bot.setControlState('jump', false), 350);
-                }
-            }, 20000);
-        }, 10000);
+        // Note: No automatic movement/jump here so verification process is uninterrupted!
     });
 
+    // Capture every raw game message / chat / title / notification
     bot.on('messagestr', (message) => {
         console.log(`[GAME] ${message}`);
     });
@@ -229,12 +213,17 @@ function startBotInstance(config) {
         }
     });
 
+    bot.on('title', (text) => {
+        console.log(`[TITLE/VERIFY] ${text}`);
+    });
+
     bot.on('kicked', (reason) => {
-        console.log(`[KICKED] Bot was kicked: ${JSON.stringify(reason)}`);
+        console.log(`[KICKED] Bot was kicked by server: ${JSON.stringify(reason)}`);
     });
 
     bot.on('end', (reason) => {
         console.log(`[SYSTEM] Bot disconnected: ${reason}`);
+        io.emit('status', 'online' === 'offline' ? 'online' : 'offline');
         io.emit('status', 'offline');
         bot = null;
         if (antiAfkInterval) clearInterval(antiAfkInterval);
@@ -273,7 +262,7 @@ io.on('connection', (socket) => {
     socket.on('command', (cmd) => {
         if (bot) {
             bot.chat(cmd);
-            console.log(`[SENT] ${cmd}`);
+            console.log(`[SENT COMMAND] ${cmd}`);
         } else {
             console.log('[SYSTEM] Error: Bot is not connected. Press "Connect Bot" first.');
         }
