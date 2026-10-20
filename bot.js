@@ -176,7 +176,6 @@ function startBotInstance(config) {
         sendLog('[SYSTEM] Bot successfully spawned in the game world!');
         io.emit('status', 'online');
 
-        // Safe Anti-AFK loop
         setTimeout(() => {
             sendLog('[SYSTEM] Activating Anti-AFK loop.');
             if (antiAfkInterval) clearInterval(antiAfkInterval);
@@ -189,7 +188,6 @@ function startBotInstance(config) {
         }, 10000);
     });
 
-    // Capture all incoming game messages, chat, and server titles/alerts
     bot.on('messagestr', (message) => {
         sendLog(`[GAME] ${message}`);
     });
