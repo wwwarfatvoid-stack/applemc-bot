@@ -1,7 +1,7 @@
 {
-  "name": "applemc-afk-bot",
+  "name": "aethermind-afk-bot",
   "version": "1.0.0",
-  "description": "24/7 Minecraft AFK Bot for AppleMC",
+  "description": "Minecraft AFK Bot with Socket.io Dashboard",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
