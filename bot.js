@@ -3,6 +3,7 @@ const autoAuth = require('mineflayer-auto-auth');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const { SocksProxyAgent } = require('socks-proxy-agent');
 
 const app = express();
 const server = http.createServer(app);
@@ -20,10 +21,14 @@ let botConfig = {
     host: 'play.applemc.fun',
     port: 25565,
     username: 'Dragonfroge_02',
-    password: ''
+    password: '',
+    proxyHost: '',
+    proxyPort: '',
+    proxyUser: '',
+    proxyPass: ''
 };
 
-// Console Log Redirection
+// Console log capture
 const originalLog = console.log;
 const originalError = console.error;
 
@@ -46,7 +51,7 @@ app.get('/', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>DragonForge Ultra AFK Studio</title>
+        <title>DragonForge AFK Studio v2.0</title>
         <script src="/socket.io/socket.io.js"></script>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
         <style>
@@ -54,7 +59,6 @@ app.get('/', (req, res) => {
                 --bg: #090d16;
                 --card-bg: #111827;
                 --accent: #38bdf8;
-                --accent-hover: #0284c7;
                 --green: #10b981;
                 --red: #ef4444;
                 --border: #1e293b;
@@ -72,18 +76,20 @@ app.get('/', (req, res) => {
             .panel { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
             .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px; }
             .field-group { display: flex; flex-direction: column; gap: 6px; }
-            label { font-size: 12px; font-weight: 600; color: #9ca3af; text-transform: uppercase; }
-            input { background: #0b0f19; border: 1px solid #1f2937; color: #fff; padding: 12px; border-radius: 8px; font-size: 14px; outline: none; transition: 0.2s; }
+            label { font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: uppercase; }
+            input { background: #0b0f19; border: 1px solid #1f2937; color: #fff; padding: 10px; border-radius: 8px; font-size: 13px; outline: none; transition: 0.2s; }
             input:focus { border-color: var(--accent); }
 
-            .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+            .proxy-title { font-size: 13px; color: var(--accent); font-weight: 600; margin: 10px 0 10px 0; border-top: 1px solid #1e293b; padding-top: 10px; }
+
+            .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
             button { padding: 12px; border: none; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer; transition: 0.2s; }
             .btn-start { background: var(--green); color: #000; }
             .btn-start:hover { opacity: 0.9; }
             .btn-stop { background: var(--red); color: #fff; }
             .btn-stop:hover { opacity: 0.9; }
 
-            .console-box { background: #030712; border: 1px solid #111827; border-radius: 10px; height: 380px; padding: 15px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.6; display: flex; flex-direction: column; gap: 4px; }
+            .console-box { background: #030712; border: 1px solid #111827; border-radius: 10px; height: 350px; padding: 15px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.6; display: flex; flex-direction: column; gap: 4px; }
             .msg { word-break: break-all; }
             .msg-info { color: #93c5fd; }
             .msg-error { color: #fca5a5; }
@@ -121,6 +127,27 @@ app.get('/', (req, res) => {
                         <input type="text" id="password" value="${botConfig.password}" placeholder="Optional">
                     </div>
                 </div>
+
+                <div class="proxy-title">SOCKS5 Residential Proxy (Optional)</div>
+                <div class="grid">
+                    <div class="field-group">
+                        <label>Proxy IP / Host</label>
+                        <input type="text" id="proxyHost" placeholder="e.g. 108.166.x.x">
+                    </div>
+                    <div class="field-group">
+                        <label>Proxy Port</label>
+                        <input type="text" id="proxyPort" placeholder="e.g. 1080">
+                    </div>
+                    <div class="field-group">
+                        <label>Proxy User</label>
+                        <input type="text" id="proxyUser" placeholder="Optional">
+                    </div>
+                    <div class="field-group">
+                        <label>Proxy Pass</label>
+                        <input type="text" id="proxyPass" placeholder="Optional">
+                    </div>
+                </div>
+
                 <div class="btn-grid">
                     <button class="btn-start" onclick="connectBot()">LAUNCH BOT</button>
                     <button class="btn-stop" onclick="disconnectBot()">DISCONNECT</button>
@@ -176,7 +203,13 @@ app.get('/', (req, res) => {
                 const port = document.getElementById('port').value;
                 const username = document.getElementById('username').value;
                 const password = document.getElementById('password').value;
-                socket.emit('startBot', { host, port, username, password });
+
+                const proxyHost = document.getElementById('proxyHost').value;
+                const proxyPort = document.getElementById('proxyPort').value;
+                const proxyUser = document.getElementById('proxyUser').value;
+                const proxyPass = document.getElementById('proxyPass').value;
+
+                socket.emit('startBot', { host, port, username, password, proxyHost, proxyPort, proxyUser, proxyPass });
             }
 
             function disconnectBot() {
@@ -203,7 +236,7 @@ function startBotInstance(config) {
     }
 
     botConfig = config;
-    console.log(`[SYSTEM] Initializing Ultra Client Connection to ${config.host}:${config.port}...`);
+    console.log(`[SYSTEM] Initializing Client Connection to ${config.host}:${config.port}...`);
 
     const botOptions = {
         host: config.host,
@@ -212,10 +245,21 @@ function startBotInstance(config) {
         version: '1.20.1',
         auth: 'offline',
         hideErrors: false,
-        checkTimeout: 120000,
-        physicsEnabled: true,
-        viewDistance: 'far'
+        checkTimeout: 120000
     };
+
+    // SOCKS5 Proxy logic
+    if (config.proxyHost && config.proxyPort) {
+        let proxyUrl = '';
+        if (config.proxyUser && config.proxyPass) {
+            proxyUrl = `socks5://${config.proxyUser}:${config.proxyPass}@${config.proxyHost}:${config.proxyPort}`;
+        } else {
+            proxyUrl = `socks5://${config.proxyHost}:${config.proxyPort}`;
+        }
+        console.log(`[PROXY] Routing connection through SOCKS5 Proxy: ${config.proxyHost}:${config.proxyPort}`);
+        const agent = new SocksProxyAgent(proxyUrl);
+        botOptions.agent = agent;
+    }
 
     if (config.password && config.password.trim() !== '') {
         botOptions.plugins = [autoAuth];
@@ -225,18 +269,17 @@ function startBotInstance(config) {
     bot = mineflayer.createBot(botOptions);
 
     bot.on('spawn', () => {
-        console.log('[SYSTEM] Bot successfully spawned! Ultra Humanizer active.');
+        console.log('[SYSTEM] Bot successfully spawned in game!');
         io.emit('status', 'online');
 
-        // Humanize Look Simulation (Slight realistic head movement)
         if (lookInterval) clearInterval(lookInterval);
         lookInterval = setInterval(() => {
             if (bot && bot.entity) {
-                const yaw = (Math.random() - 0.5) * 0.5;
+                const yaw = (Math.random() - 0.5) * 0.4;
                 const pitch = (Math.random() - 0.5) * 0.2;
                 bot.look(bot.entity.yaw + yaw, bot.entity.pitch + pitch, false);
             }
-        }, 4000);
+        }, 5000);
     });
 
     bot.on('messagestr', (message) => {
@@ -269,7 +312,7 @@ function startBotInstance(config) {
 
 function stopBotInstance() {
     if (bot) {
-        bot.quit('Disconnected from Ultra Dashboard');
+        bot.quit('User disconnected');
         bot = null;
         if (antiAfkInterval) clearInterval(antiAfkInterval);
         if (lookInterval) clearInterval(lookInterval);
@@ -300,5 +343,5 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
-    console.log(`Ultra Dashboard Server active on port ${PORT}`);
+    console.log(`Dashboard Server active on port ${PORT}`);
 });
