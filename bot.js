@@ -198,6 +198,11 @@ function startBotInstance(config) {
         }
     });
 
+    // Detailed KICK log
+    bot.on('kicked', (reason) => {
+        sendLog(`[KICKED] Bot was kicked: ${JSON.stringify(reason)}`);
+    });
+
     bot.on('end', (reason) => {
         sendLog(`[SYSTEM] Bot disconnected: ${reason}`);
         io.emit('status', 'offline');
@@ -205,8 +210,9 @@ function startBotInstance(config) {
         if (antiAfkInterval) clearInterval(antiAfkInterval);
     });
 
+    // Detailed ERROR log
     bot.on('error', (err) => {
-        sendLog(`[ERROR] ${err.message}`);
+        sendLog(`[ERROR] Connection error: ${err.message}`);
         io.emit('status', 'offline');
     });
 }
