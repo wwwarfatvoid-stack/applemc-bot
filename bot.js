@@ -3,7 +3,7 @@ const autoAuth = require('mineflayer-auto-auth');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { SocksProxyAgent } = require('socks-proxy-agent');
+const { HttpProxyAgent } = require('http-proxy-agent');
 
 const app = express();
 const server = http.createServer(app);
@@ -28,7 +28,6 @@ let botConfig = {
     proxyPass: ''
 };
 
-// Console log capture
 const originalLog = console.log;
 const originalError = console.error;
 
@@ -128,23 +127,23 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
 
-                <div class="proxy-title">SOCKS5 Residential Proxy (Optional)</div>
+                <div class="proxy-title">HTTP Proxy (Webshare)</div>
                 <div class="grid">
                     <div class="field-group">
                         <label>Proxy IP / Host</label>
-                        <input type="text" id="proxyHost" placeholder="e.g. 108.166.x.x">
+                        <input type="text" id="proxyHost" value="45.38.107.97">
                     </div>
                     <div class="field-group">
                         <label>Proxy Port</label>
-                        <input type="text" id="proxyPort" placeholder="e.g. 1080">
+                        <input type="text" id="proxyPort" value="6014">
                     </div>
                     <div class="field-group">
                         <label>Proxy User</label>
-                        <input type="text" id="proxyUser" placeholder="Optional">
+                        <input type="text" id="proxyUser" value="uqbylpwv">
                     </div>
                     <div class="field-group">
                         <label>Proxy Pass</label>
-                        <input type="text" id="proxyPass" placeholder="Optional">
+                        <input type="text" id="proxyPass" value="sviu1ch7jzgw">
                     </div>
                 </div>
 
@@ -157,7 +156,7 @@ app.get('/', (req, res) => {
             <div class="panel">
                 <div id="console" class="console-box"></div>
                 <div class="input-row">
-                    <input type="text" id="cmd" placeholder="Send chat message or command (/login, /register, etc.)..." onkeydown="if(event.key==='Enter') sendMsg()">
+                    <input type="text" id="cmd" placeholder="Send chat message or command..." onkeydown="if(event.key==='Enter') sendMsg()">
                     <button class="btn-send" onclick="sendMsg()">SEND</button>
                 </div>
             </div>
@@ -248,16 +247,16 @@ function startBotInstance(config) {
         checkTimeout: 120000
     };
 
-    // SOCKS5 Proxy logic
+    // HTTP Proxy logic for Webshare
     if (config.proxyHost && config.proxyPort) {
         let proxyUrl = '';
         if (config.proxyUser && config.proxyPass) {
-            proxyUrl = `socks5://${config.proxyUser}:${config.proxyPass}@${config.proxyHost}:${config.proxyPort}`;
+            proxyUrl = `http://${config.proxyUser}:${config.proxyPass}@${config.proxyHost}:${config.proxyPort}`;
         } else {
-            proxyUrl = `socks5://${config.proxyHost}:${config.proxyPort}`;
+            proxyUrl = `http://${config.proxyHost}:${config.proxyPort}`;
         }
-        console.log(`[PROXY] Routing connection through SOCKS5 Proxy: ${config.proxyHost}:${config.proxyPort}`);
-        const agent = new SocksProxyAgent(proxyUrl);
+        console.log(`[PROXY] Routing connection through HTTP Proxy: ${config.proxyHost}:${config.proxyPort}`);
+        const agent = new HttpProxyAgent(proxyUrl);
         botOptions.agent = agent;
     }
 
@@ -315,7 +314,7 @@ function stopBotInstance() {
         bot.quit('User disconnected');
         bot = null;
         if (antiAfkInterval) clearInterval(antiAfkInterval);
-        if (lookInterval) clearInterval(lookInterval);
+        if (lookInterval) ProxyCleanup = null;
         console.log('[SYSTEM] Bot disconnected.');
         io.emit('status', 'offline');
     }
