@@ -4,6 +4,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const { HttpProxyAgent } = require('http-proxy-agent');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 const server = http.createServer(app);
@@ -24,7 +25,8 @@ let botConfig = {
     proxyHost: '45.38.107.97',
     proxyPort: '6014',
     proxyUser: 'uqbylpwv',
-    proxyPass: 'sviu1ch7jzgw'
+    proxyPass: 'sviu1ch7jzgw',
+    geminiKey: ''
 };
 
 const originalLog = console.log;
@@ -93,6 +95,7 @@ app.get('/', (req, res) => {
             .msg-error { color: #fca5a5; font-weight: 600; background: rgba(239, 68, 68, 0.1); padding: 4px 8px; border-radius: 4px; border-left: 3px solid var(--red); }
             .msg-game { color: #a7f3d0; }
             .msg-chat { color: #fde047; }
+            .msg-ai { color: #c084fc; font-weight: 600; }
 
             .input-row { display: flex; gap: 10px; margin-top: 12px; }
             .input-row input { flex: 1; }
@@ -126,6 +129,14 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
 
+                <div class="proxy-title">Gemini AI Integration (Optional)</div>
+                <div class="grid">
+                    <div class="field-group" style="grid-column: span 2;">
+                        <label>Gemini API Key</label>
+                        <input type="text" id="geminiKey" placeholder="Paste your Google AI Studio API Key (AIzaSy...) here">
+                    </div>
+                </div>
+
                 <div class="proxy-title">HTTP Proxy (Webshare)</div>
                 <div class="grid">
                     <div class="field-group">
@@ -155,7 +166,7 @@ app.get('/', (req, res) => {
             <div class="panel">
                 <div id="console" class="console-box"></div>
                 <div class="input-row">
-                    <input type="text" id="cmd" placeholder="Send chat message or command..." onkeydown="if(event.key==='Enter') sendMsg()">
+                    <input type="text" id="cmd" placeholder="Ask AI (ai: question) or type command..." onkeydown="if(event.key==='Enter') sendMsg()">
                     <button class="btn-send" onclick="sendMsg()">SEND</button>
                 </div>
             </div>
@@ -201,13 +212,14 @@ app.get('/', (req, res) => {
                 const port = document.getElementById('port').value;
                 const username = document.getElementById('username').value;
                 const password = document.getElementById('password').value;
+                const geminiKey = document.getElementById('geminiKey').value;
 
                 const proxyHost = document.getElementById('proxyHost').value;
                 const proxyPort = document.getElementById('proxyPort').value;
                 const proxyUser = document.getElementById('proxyUser').value;
                 const proxyPass = document.getElementById('proxyPass').value;
 
-                socket.emit('startBot', { host, port, username, password, proxyHost, proxyPort, proxyUser, proxyPass });
+                socket.emit('startBot', { host, port, username, password, geminiKey, proxyHost, proxyPort, proxyUser, proxyPass });
             }
 
             function disconnectBot() {
@@ -226,6 +238,17 @@ app.get('/', (req, res) => {
     </html>
     `);
 });
+
+async function askGemini(apiKey, prompt) {
+    try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const result = await model.generateContent(prompt);
+        return result.response.text();
+    } catch (err) {
+        return `[AI ERROR] ${err.message}`;
+    }
+}
 
 function startBotInstance(config) {
     if (bot) {
@@ -283,9 +306,18 @@ function startBotInstance(config) {
         io.emit('message', { type: 'game', text: `[GAME] ${message}` });
     });
 
-    bot.on('chat', (username, message) => {
+    bot.on('chat', async (username, message) => {
         if (username !== bot.username) {
             io.emit('message', { type: 'chat', text: `[CHAT] <${username}> ${message}` });
+
+            if (message.toLowerCase().includes(bot.username.toLowerCase()) && config.geminiKey) {
+                console.log(`[AI] Generating response for ${username}'s message...`);
+                const aiReply = await askGemini(config.geminiKey, `You are a Minecraft player named ${bot.username}. Someone named ${username} said to you: "${message}". Keep your reply short, friendly, and natural (max 1 sentence).`);
+                if (aiReply && bot) {
+                    bot.chat(aiReply);
+                    io.emit('message', { type: 'ai', text: `[AI REPLY] ${aiReply}` });
+                }
+            }
         }
     });
 
@@ -336,10 +368,22 @@ io.on('connection', (socket) => {
         stopBotInstance();
     });
 
-    socket.on('command', (cmd) => {
+    socket.on('command', async (cmd) => {
         if (bot) {
-            bot.chat(cmd);
-            io.emit('message', { type: 'info', text: `[SENT] ${cmd}` });
+            if (cmd.startsWith('ai: ')) {
+                const prompt = cmd.replace('ai: ', '');
+                if (botConfig.geminiKey) {
+                    io.emit('message', { type: 'info', text: `[AI] Thinking about: "${prompt}"...` });
+                    const aiAnswer = await askGemini(botConfig.geminiKey, prompt);
+                    bot.chat(aiAnswer);
+                    io.emit('message', { type: 'ai', text: `[AI SENT] ${aiAnswer}` });
+                } else {
+                    io.emit('message', { type: 'error', text: '[SYSTEM] Gemini API Key is missing in dashboard!' });
+                }
+            } else {
+                bot.chat(cmd);
+                io.emit('message', { type: 'info', text: `[SENT] ${cmd}` });
+            }
         } else {
             io.emit('message', { type: 'error', text: '[SYSTEM] Bot is not connected!' });
         }
