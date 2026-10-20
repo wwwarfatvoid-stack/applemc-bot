@@ -1,7 +1,7 @@
 {
   "name": "aethermind-afk-bot",
   "version": "1.0.0",
-  "description": "Minecraft AFK Bot with Socket.io Dashboard",
+  "description": "Minecraft AFK Bot with Socket.io Dashboard and SOCKS5 Proxy Support",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
@@ -10,6 +10,7 @@
     "express": "^4.18.2",
     "mineflayer": "^4.12.0",
     "mineflayer-auto-auth": "*",
-    "socket.io": "^4.7.2"
+    "socket.io": "^4.7.2",
+    "socks-proxy-agent": "^8.0.2"
   }
 }
